@@ -1,3 +1,5 @@
+use git2::{Repository, StatusOptions, StatusShow};
+use std::error::Error;
 use std::io::{self, stdout};
 
 use crossterm::{
@@ -14,11 +16,17 @@ fn main() -> io::Result<()> {
     stdout().execute(EnterAlternateScreen)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
 
-    let app_state = initialize_app_state();
-    let mut should_quit = false;
-    while !should_quit {
-        draw_ui(&mut terminal, &app_state)?;
-        should_quit = handle_events()?;
+    match initialize_app_state() {
+        Err(e) => {
+            println!("Error: {e}");
+        }
+        Ok(app_state) => {
+            let mut should_quit = false;
+            while !should_quit {
+                draw_ui(&mut terminal, &app_state)?;
+                should_quit = handle_events()?;
+            }
+        }
     }
 
     disable_raw_mode()?;
@@ -77,17 +85,31 @@ fn draw_ui<B: ratatui::backend::Backend>(
     Ok(())
 }
 
-fn initialize_app_state() -> AppState {
-    let files = vec![FileState {
-        path: "src/main.rs".to_string(),
-        expanded: false,
-        changes: vec![Change {
-            line_number: 10,
-            content: "+ println!(\"Hello, world!\");".to_string(),
-        }],
-    }];
+fn initialize_app_state() -> Result<AppState, Box<dyn Error>> {
+    let repo = Repository::open(".")?;
+    let mut opts = StatusOptions::new();
+    opts.include_untracked(true).include_ignored(false);
 
-    AppState { files }
+    let statuses = repo.statuses(Some(&mut opts))?;
+
+    let mut files = Vec::new();
+
+    for entry in statuses.iter() {
+        let file_path = match entry.path() {
+            Some(path) => path.to_string(),
+            None => continue,
+        };
+
+        let file_state = FileState {
+            path: file_path,
+            expanded: false,
+            changes: vec![],
+        };
+
+        files.push(file_state);
+    }
+
+    Ok(AppState { files })
 }
 
 struct AppState {
