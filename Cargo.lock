@@ -389,15 +389,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "replicate"
-version = "0.1.0"
-dependencies = [
- "crossterm",
- "git2",
- "ratatui",
-]
-
-[[package]]
 name = "rustversion"
 version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -459,6 +450,15 @@ checksum = "ebd1b177894da2a2d9120208c3386066af06a488255caabc5de8ddca22dbc3ce"
 dependencies = [
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "stagit"
+version = "0.1.0"
+dependencies = [
+ "crossterm",
+ "git2",
+ "ratatui",
 ]
 
 [[package]]
