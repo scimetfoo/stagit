@@ -12,6 +12,7 @@ use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::ListItem;
 use ratatui::{prelude::*, widgets::*, Frame};
+mod ui;
 
 struct GitIndex {
     staged: Staged,
@@ -55,85 +56,19 @@ fn main() -> io::Result<()> {
     enable_raw_mode()?;
     stdout().execute(EnterAlternateScreen)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
+    terminal.show_cursor()?;
     let path = PathBuf::from(r".");
 
     match CurrentGitRepository::new(path).fetch_index() {
         Err(e) => {
             println!("Error: {e}");
         }
-        Ok(git_index) => {
-            let mut should_quit = false;
-            while !should_quit {
-                draw_ui(&mut terminal, &git_index)?;
-                should_quit = handle_events()?;
-            }
-        }
+        Ok(git_index) => ui::AppState::new().run(&mut terminal, &git_index)?,
     }
 
     disable_raw_mode()?;
     stdout().execute(LeaveAlternateScreen)?;
     Ok(())
-}
-
-fn handle_events() -> io::Result<bool> {
-    if event::poll(std::time::Duration::from_millis(50))? {
-        if let Event::Key(key) = event::read()? {
-            if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('q') {
-                return Ok(true);
-            }
-        }
-    }
-    Ok(false)
-}
-
-fn draw_ui<B: Backend>(
-    terminal: &mut Terminal<B>,
-    git_index: &GitIndex,
-) -> Result<(), std::io::Error> {
-    let _ = terminal.draw(|frame| {
-        let size = frame.size();
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
-            .split(size);
-
-        draw_files_section(frame, &chunks[0], "Staged Files", &git_index.staged.files);
-
-        draw_files_section(
-            frame,
-            &chunks[1],
-            "Unstaged Files",
-            &git_index.unstaged.files,
-        );
-    });
-    Ok(())
-}
-
-fn draw_files_section(frame: &mut Frame, area: &Rect, title: &str, files: &[FileState]) {
-    let files_list: Vec<ListItem> = files
-        .iter()
-        .map(|file| {
-            let content = if file.expanded {
-                file.changes
-                    .iter()
-                    .map(|change| {
-                        Span::from(Span::raw(format!(
-                            "{}: {}",
-                            change.line_number, change.content
-                        )))
-                    })
-                    .collect::<Vec<Span>>()
-            } else {
-                vec![Span::from(Span::raw(&file.path))]
-            };
-
-            ListItem::new(Text::from(Line::from(content)))
-        })
-        .collect();
-
-    let list = List::new(files_list).block(Block::default().title(title).borders(Borders::ALL));
-
-    frame.render_widget(list, *area);
 }
 
 impl GitRepository for CurrentGitRepository {
