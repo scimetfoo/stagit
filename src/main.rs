@@ -8,8 +8,8 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
-use ratatui::text::{Line, Span};
 use ratatui::layout::Rect;
+use ratatui::text::{Line, Span};
 use ratatui::widgets::ListItem;
 use ratatui::{prelude::*, widgets::*, Frame};
 
@@ -90,40 +90,48 @@ fn draw_ui<B: Backend>(
     terminal: &mut Terminal<B>,
     git_index: &GitIndex,
 ) -> Result<(), std::io::Error> {
-    terminal.draw(|frame| {
+    let _ = terminal.draw(|frame| {
         let size = frame.size();
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
             .split(size);
 
-        // Staged files section
         draw_files_section(frame, &chunks[0], "Staged Files", &git_index.staged.files);
 
-        // Unstaged files section
-        draw_files_section(frame, &chunks[1], "Unstaged Files", &git_index.unstaged.files);
+        draw_files_section(
+            frame,
+            &chunks[1],
+            "Unstaged Files",
+            &git_index.unstaged.files,
+        );
     });
     Ok(())
 }
 
 fn draw_files_section(frame: &mut Frame, area: &Rect, title: &str, files: &[FileState]) {
-    let files_list: Vec<ListItem> = files.iter().map(|file| {
-        let content = if file.expanded {
-            file.changes.iter().map(|change| {
-                Span::from(Span::raw(format!(
-                                "{}: {}",
-                                change.line_number, change.content
-                            )))
-            }).collect::<Vec<Span>>()
-        } else {
-            vec![Span::from(Span::raw(&file.path))]
-        };
+    let files_list: Vec<ListItem> = files
+        .iter()
+        .map(|file| {
+            let content = if file.expanded {
+                file.changes
+                    .iter()
+                    .map(|change| {
+                        Span::from(Span::raw(format!(
+                            "{}: {}",
+                            change.line_number, change.content
+                        )))
+                    })
+                    .collect::<Vec<Span>>()
+            } else {
+                vec![Span::from(Span::raw(&file.path))]
+            };
 
-        ListItem::new(Text::from(Line::from(content)))
-    }).collect();
+            ListItem::new(Text::from(Line::from(content)))
+        })
+        .collect();
 
-    let list = List::new(files_list)
-        .block(Block::default().title(title).borders(Borders::ALL));
+    let list = List::new(files_list).block(Block::default().title(title).borders(Borders::ALL));
 
     frame.render_widget(list, *area);
 }
@@ -148,8 +156,6 @@ impl GitRepository for CurrentGitRepository {
         for entry in statuses.iter() {
             let file_path = entry.path().unwrap_or_default().to_string();
 
-
-            // Determine if the file is staged
             if entry.status().intersects(
                 Status::INDEX_NEW
                     | Status::INDEX_MODIFIED
@@ -160,7 +166,6 @@ impl GitRepository for CurrentGitRepository {
                 update_file_states(&mut staged_files, file_path.clone());
             }
 
-            // Determine if the file is unstaged
             if entry.status().intersects(
                 Status::WT_MODIFIED
                     | Status::WT_DELETED
