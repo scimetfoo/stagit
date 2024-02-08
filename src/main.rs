@@ -8,10 +8,10 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
-use ratatui::text::Line;
-use ratatui::text::Span;
+use ratatui::text::{Line, Span};
+use ratatui::layout::Rect;
 use ratatui::widgets::ListItem;
-use ratatui::{prelude::*, widgets::*};
+use ratatui::{prelude::*, widgets::*, Frame};
 
 struct GitIndex {
     staged: Staged,
@@ -86,45 +86,46 @@ fn handle_events() -> io::Result<bool> {
     Ok(false)
 }
 
-fn draw_ui<B: ratatui::backend::Backend>(
+fn draw_ui<B: Backend>(
     terminal: &mut Terminal<B>,
     git_index: &GitIndex,
 ) -> Result<(), std::io::Error> {
-    let _ = terminal.draw(|frame| {
-        let files: Vec<ListItem> = git_index
-            .unstaged
-            .files
-            .iter()
-            .map(|file| {
-                let content = if file.expanded {
-                    file.changes
-                        .iter()
-                        .map(|change| {
-                            Span::from(Span::raw(format!(
+    terminal.draw(|frame| {
+        let size = frame.size();
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+            .split(size);
+
+        // Staged files section
+        draw_files_section(frame, &chunks[0], "Staged Files", &git_index.staged.files);
+
+        // Unstaged files section
+        draw_files_section(frame, &chunks[1], "Unstaged Files", &git_index.unstaged.files);
+    });
+    Ok(())
+}
+
+fn draw_files_section(frame: &mut Frame, area: &Rect, title: &str, files: &[FileState]) {
+    let files_list: Vec<ListItem> = files.iter().map(|file| {
+        let content = if file.expanded {
+            file.changes.iter().map(|change| {
+                Span::from(Span::raw(format!(
                                 "{}: {}",
                                 change.line_number, change.content
                             )))
-                        })
-                        .collect::<Vec<Span>>()
-                } else {
-                    vec![Span::from(Span::raw(&file.path))]
-                };
+            }).collect::<Vec<Span>>()
+        } else {
+            vec![Span::from(Span::raw(&file.path))]
+        };
 
-                let text = Text::from(Line::from(content));
+        ListItem::new(Text::from(Line::from(content)))
+    }).collect();
 
-                ListItem::new(text)
-            })
-            .collect();
+    let list = List::new(files_list)
+        .block(Block::default().title(title).borders(Borders::ALL));
 
-        let files_list = List::new(files).block(
-            Block::default()
-                .title("Files to Stage")
-                .borders(Borders::ALL),
-        );
-
-        frame.render_widget(files_list, frame.size());
-    });
-    Ok(())
+    frame.render_widget(list, *area);
 }
 
 impl GitRepository for CurrentGitRepository {
