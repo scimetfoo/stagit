@@ -1,5 +1,6 @@
-use git2::{Repository, StatusOptions, StatusShow};
+use git2::{Repository, StatusOptions, StatusShow, Status};
 use std::error::Error;
+use std::path::PathBuf;
 use std::io::{self, stdout};
 
 use crossterm::{
@@ -8,22 +9,61 @@ use crossterm::{
     ExecutableCommand,
 };
 use ratatui::text::Span;
+use ratatui::text::Line;
 use ratatui::widgets::ListItem;
 use ratatui::{prelude::*, widgets::*};
+
+struct GitIndex {
+    files: Vec<FileState>,
+}
+
+struct FileState {
+    path: String,
+    expanded: bool,
+    changes: Vec<Change>,
+}
+
+struct Unstaged {
+    files: Vec<FileState>
+}
+
+struct Staged {
+    files: Vec<FileState>
+}
+
+enum ChangeType {
+    Addition,
+    Deletion,
+}
+
+struct Change {
+    line_number: usize,
+    content: String,
+}
+
+trait GitRepository {
+    fn new(path: PathBuf) -> Self;
+    fn fetch_index(&self) -> Result<GitIndex, Box<dyn Error>>;
+}
+
+struct CurrentGitRepository {
+    path: PathBuf,
+}
 
 fn main() -> io::Result<()> {
     enable_raw_mode()?;
     stdout().execute(EnterAlternateScreen)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
+    let path = PathBuf::from(r".");
 
-    match initialize_app_state() {
+    match CurrentGitRepository::new(path).fetch_index() {
         Err(e) => {
             println!("Error: {e}");
         }
-        Ok(app_state) => {
+        Ok(git_index) => {
             let mut should_quit = false;
             while !should_quit {
-                draw_ui(&mut terminal, &app_state)?;
+                draw_ui(&mut terminal, &git_index)?;
                 should_quit = handle_events()?;
             }
         }
@@ -47,10 +87,10 @@ fn handle_events() -> io::Result<bool> {
 
 fn draw_ui<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
-    app_state: &AppState,
+    git_index: &GitIndex,
 ) -> Result<(), std::io::Error> {
     let _ = terminal.draw(|frame| {
-        let files: Vec<ListItem> = app_state
+        let files: Vec<ListItem> = git_index
             .files
             .iter()
             .map(|file| {
@@ -85,44 +125,37 @@ fn draw_ui<B: ratatui::backend::Backend>(
     Ok(())
 }
 
-fn initialize_app_state() -> Result<AppState, Box<dyn Error>> {
-    let repo = Repository::open(".")?;
-    let mut opts = StatusOptions::new();
-    opts.include_untracked(true).include_ignored(false);
-
-    let statuses = repo.statuses(Some(&mut opts))?;
-
-    let mut files = Vec::new();
-
-    for entry in statuses.iter() {
-        let file_path = match entry.path() {
-            Some(path) => path.to_string(),
-            None => continue,
-        };
-
-        let file_state = FileState {
-            path: file_path,
-            expanded: false,
-            changes: vec![],
-        };
-
-        files.push(file_state);
+impl GitRepository for CurrentGitRepository {
+    fn new(path: PathBuf) -> Self {
+        CurrentGitRepository { path }
     }
 
-    Ok(AppState { files })
+    fn fetch_index(&self) -> Result<GitIndex, Box<dyn Error>> {
+        let repo = Repository::open(&self.path)?;
+        let mut opts = StatusOptions::new();
+        opts.include_untracked(true).include_ignored(false);
+
+        let statuses = repo.statuses(Some(&mut opts))?;
+
+        let mut files = Vec::new();
+
+        for entry in statuses.iter() {
+            let file_path = match entry.path() {
+                Some(path) => path.to_string(),
+                None => continue,
+            };
+
+            let file_state = FileState {
+                path: file_path,
+                expanded: false,
+                changes: vec![],
+            };
+
+            files.push(file_state);
+        }
+
+        Ok(GitIndex { files })
+    }
 }
 
-struct AppState {
-    files: Vec<FileState>,
-}
 
-struct FileState {
-    path: String,
-    expanded: bool,
-    changes: Vec<Change>,
-}
-
-struct Change {
-    line_number: usize,
-    content: String,
-}
