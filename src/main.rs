@@ -1,20 +1,21 @@
-use git2::{Repository, StatusOptions, StatusShow, Status};
+use git2::{Repository, Status, StatusOptions, StatusShow};
 use std::error::Error;
-use std::path::PathBuf;
 use std::io::{self, stdout};
+use std::path::PathBuf;
 
 use crossterm::{
     event::{self, Event, KeyCode},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
-use ratatui::text::Span;
 use ratatui::text::Line;
+use ratatui::text::Span;
 use ratatui::widgets::ListItem;
 use ratatui::{prelude::*, widgets::*};
 
 struct GitIndex {
-    files: Vec<FileState>,
+    staged: Staged,
+    unstaged: Unstaged,
 }
 
 struct FileState {
@@ -24,11 +25,11 @@ struct FileState {
 }
 
 struct Unstaged {
-    files: Vec<FileState>
+    files: Vec<FileState>,
 }
 
 struct Staged {
-    files: Vec<FileState>
+    files: Vec<FileState>,
 }
 
 enum ChangeType {
@@ -91,6 +92,7 @@ fn draw_ui<B: ratatui::backend::Backend>(
 ) -> Result<(), std::io::Error> {
     let _ = terminal.draw(|frame| {
         let files: Vec<ListItem> = git_index
+            .unstaged
             .files
             .iter()
             .map(|file| {
@@ -133,29 +135,60 @@ impl GitRepository for CurrentGitRepository {
     fn fetch_index(&self) -> Result<GitIndex, Box<dyn Error>> {
         let repo = Repository::open(&self.path)?;
         let mut opts = StatusOptions::new();
-        opts.include_untracked(true).include_ignored(false);
+        opts.include_untracked(true)
+            .include_ignored(false)
+            .show(git2::StatusShow::IndexAndWorkdir);
 
         let statuses = repo.statuses(Some(&mut opts))?;
 
-        let mut files = Vec::new();
+        let mut staged_files: Vec<FileState> = Vec::new();
+        let mut unstaged_files: Vec<FileState> = Vec::new();
 
         for entry in statuses.iter() {
-            let file_path = match entry.path() {
-                Some(path) => path.to_string(),
-                None => continue,
-            };
+            let file_path = entry.path().unwrap_or_default().to_string();
 
-            let file_state = FileState {
-                path: file_path,
-                expanded: false,
-                changes: vec![],
-            };
 
-            files.push(file_state);
+            // Determine if the file is staged
+            if entry.status().intersects(
+                Status::INDEX_NEW
+                    | Status::INDEX_MODIFIED
+                    | Status::INDEX_DELETED
+                    | Status::INDEX_RENAMED
+                    | Status::INDEX_TYPECHANGE,
+            ) {
+                update_file_states(&mut staged_files, file_path.clone());
+            }
+
+            // Determine if the file is unstaged
+            if entry.status().intersects(
+                Status::WT_MODIFIED
+                    | Status::WT_DELETED
+                    | Status::WT_NEW
+                    | Status::WT_RENAMED
+                    | Status::WT_TYPECHANGE,
+            ) {
+                update_file_states(&mut unstaged_files, file_path);
+            }
         }
 
-        Ok(GitIndex { files })
+        Ok(GitIndex {
+            staged: Staged {
+                files: staged_files,
+            },
+            unstaged: Unstaged {
+                files: unstaged_files,
+            },
+        })
     }
 }
 
-
+fn update_file_states(file_states: &mut Vec<FileState>, file_path: String) {
+    match file_states.iter_mut().find(|fs| fs.path == file_path) {
+        Some(file_state) => (),
+        None => file_states.push(FileState {
+            path: file_path,
+            expanded: false,
+            changes: vec![],
+        }),
+    }
+}
