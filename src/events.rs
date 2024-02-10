@@ -2,8 +2,6 @@ use crate::FileState;
 use crate::GitIndex;
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind},
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-    ExecutableCommand,
 };
 use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
@@ -78,49 +76,24 @@ impl AppState<'_> {
 
 pub fn draw_ui<B: Backend>(
     terminal: &mut Terminal<B>,
-    git_index: &GitIndex,
+    _git_index: &GitIndex,
     app_state: &AppState,
 ) -> Result<(), std::io::Error> {
     terminal.draw(|frame| {
         frame.set_cursor(0, 0);
-        let size = frame.size();
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(1),
-                app_state
-                    .staged
-                    .expanded
-                    .then(|| Constraint::Percentage(50))
-                    .unwrap_or(Constraint::Length(0)),
-                Constraint::Length(1),
-                app_state
-                    .unstaged
-                    .expanded
-                    .then(|| Constraint::Percentage(50))
-                    .unwrap_or(Constraint::Length(0)),
-            ])
-            .split(size);
-
-        draw_header(
+        let _header_state = draw_headers(
             frame,
-            &chunks[0],
-            app_state.staged.title,
-            app_state.staged.expanded,
+            [
+                "▶  Untracked",
+                "▶  Unstaged",
+                "▶  Staged",
+                "▼  Untracked",
+                "▼  Unstaged",
+                "▼  Staged",
+            ],
+            frame.size(),
+            app_state,
         );
-        if app_state.staged.expanded {
-            draw_files_section(frame, &chunks[1], &git_index.staged.files);
-        }
-
-        draw_header(
-            frame,
-            &chunks[2],
-            app_state.unstaged.title,
-            app_state.unstaged.expanded,
-        );
-        if app_state.unstaged.expanded {
-            draw_files_section(frame, &chunks[3], &git_index.unstaged.files);
-        }
     });
     Ok(())
 }
@@ -150,6 +123,22 @@ fn draw_files_section(frame: &mut Frame, area: &Rect, files: &[FileState]) {
     let list = List::new(files_list);
 
     frame.render_widget(list, *area);
+}
+
+fn draw_headers(
+    frame: &mut Frame,
+    items: [&str; 6],
+    area: Rect,
+    _app_state: &AppState,
+) -> ListState {
+    let header_state: &mut ListState = &mut ListState::default();
+    let header_list = List::new(items)
+        .block(Block::default().borders(Borders::ALL))
+        .highlight_style(Style::new().add_modifier(Modifier::REVERSED))
+        .repeat_highlight_symbol(true);
+
+    frame.render_stateful_widget(header_list, area, header_state);
+    return header_state.clone();
 }
 
 fn draw_header(frame: &mut Frame, area: &Rect, title: &str, expanded: bool) {

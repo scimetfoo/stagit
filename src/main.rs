@@ -1,18 +1,17 @@
-use git2::{Repository, Status, StatusOptions, StatusShow};
+use git2::{Repository, Status, StatusOptions};
 use std::error::Error;
 use std::io::{self, stdout};
 use std::path::PathBuf;
 
 use crossterm::{
-    event::{self, Event, KeyCode},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
-use ratatui::layout::Rect;
-use ratatui::text::{Line, Span};
-use ratatui::widgets::ListItem;
-use ratatui::{prelude::*, widgets::*, Frame};
-mod ui;
+
+
+
+use ratatui::{prelude::*};
+mod events;
 
 struct GitIndex {
     staged: Staged,
@@ -63,7 +62,7 @@ fn main() -> io::Result<()> {
         Err(e) => {
             println!("Error: {e}");
         }
-        Ok(git_index) => ui::AppState::new().run(&mut terminal, &git_index)?,
+        Ok(git_index) => events::AppState::new().run(&mut terminal, &git_index)?,
     }
 
     disable_raw_mode()?;
@@ -125,7 +124,7 @@ impl GitRepository for CurrentGitRepository {
 
 fn update_file_states(file_states: &mut Vec<FileState>, file_path: String) {
     match file_states.iter_mut().find(|fs| fs.path == file_path) {
-        Some(file_state) => (),
+        Some(_file_state) => (),
         None => file_states.push(FileState {
             path: file_path,
             expanded: false,
