@@ -31,12 +31,14 @@ impl Toggle for Header {
 }
 
 pub struct AppState {
+    cursor_position: (u16, u16),
     headers: Vec<Header>,
 }
 
 impl AppState {
     pub fn new() -> AppState {
         AppState {
+            cursor_position: (0, 0),
             headers: vec![
                 Header {
                     title: String::from("untracked files"),
@@ -58,7 +60,7 @@ impl AppState {
     }
 
     pub fn run<B: Backend>(
-        self,
+        &mut self,
         terminal: &mut Terminal<B>,
         git_index: &GitIndex,
     ) -> Result<(), std::io::Error> {
@@ -69,6 +71,14 @@ impl AppState {
                     use KeyCode::*;
                     match key.code {
                         Char('q') | Esc => return Ok(()),
+                        KeyCode::Up => {
+                            self.cursor_position.1 = self.cursor_position.1.saturating_sub(1)
+                        }
+                        KeyCode::Down => self.cursor_position.1 += 1,
+                        KeyCode::Left => {
+                            self.cursor_position.0 = self.cursor_position.0.saturating_sub(1)
+                        }
+                        KeyCode::Right => self.cursor_position.0 += 1,
                         _ => {}
                     }
                 }
@@ -83,8 +93,8 @@ pub fn draw_ui<B: Backend>(
     app_state: &AppState,
 ) -> Result<(), std::io::Error> {
     terminal.draw(|frame| {
-        frame.set_cursor(0, 0);
         let _header_state = draw_headers(frame, frame.size(), app_state);
+        frame.set_cursor(app_state.cursor_position.0, app_state.cursor_position.1)
     });
     Ok(())
 }
